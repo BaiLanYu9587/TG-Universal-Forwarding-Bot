@@ -1,0 +1,18 @@
+[package]
+name = "core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+regex.workspace = true
+storage = { path = "../storage" }
+common = { path = "../common" }
+config = { path = "../config" }
+rust-stemmers = "1.2"
+siphasher = "1.0"

@@ -1,0 +1,31 @@
+[workspace]
+members = ["app", "core", "tdlib", "storage", "config", "common", "logging"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["haozi"]
+license = "MIT"
+
+[workspace.dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+dotenv = "0.15"
+regex = "1.10"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
+
+[workspace.dependencies.grammers-client]
+version = "0.8"
+
+[workspace.dependencies.grammers-session]
+version = "0.8"
+
+[workspace.dependencies.grammers-mtsender]
+version = "0.8"

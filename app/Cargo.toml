@@ -1,0 +1,18 @@
+[package]
+name = "app"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+dotenv.workspace = true
+image.workspace = true
+grammers-client.workspace = true
+logging = { path = "../logging" }
+config = { path = "../config" }
+tg_core = { path = "../core", package = "core" }
+tdlib = { path = "../tdlib" }
+storage = { path = "../storage" }
+common = { path = "../common" }

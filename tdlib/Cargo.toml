@@ -1,0 +1,17 @@
+[package]
+name = "tdlib"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+grammers-client.workspace = true
+grammers-session.workspace = true
+grammers-mtsender.workspace = true
+common = { path = "../common" }
+tg_core = { path = "../core", package = "core" }
