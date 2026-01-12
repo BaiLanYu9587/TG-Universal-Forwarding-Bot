@@ -1,6 +1,6 @@
 # Rust + grammers Telegram 転送ツール
 
-**Languages:** [English](README.md) | 日本語 | [한국어](README_ko.md)
+**Languages:** [English](README.md) | [中文](README_zh.md) | 日本語 | [한국어](README_ko.md)
 
 ## プロジェクト構成
 

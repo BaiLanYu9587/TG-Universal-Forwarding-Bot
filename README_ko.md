@@ -1,6 +1,6 @@
 # Rust + grammers Telegram 포워더
 
-**Languages:** [English](README.md) | [日本語](README_ja.md) | 한국어
+**Languages:** [English](README.md) | [中文](README_zh.md) | [日本語](README_ja.md) | 한국어
 
 ## 프로젝트 구조
 
