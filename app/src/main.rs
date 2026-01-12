@@ -1556,6 +1556,41 @@ impl TelegramForwarder {
             })
         };
 
+        let thumb_dir = self.config.thumb_dir.clone();
+        let thumb_cleanup_max_age = Duration::from_secs(600);
+        let thumb_cleanup_interval = poll_interval.max(Duration::from_secs(60));
+        let thumb_cleanup_running = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let thumb_cleanup_task = {
+            let shutdown = shutdown.clone();
+            let thumb_dir = thumb_dir.clone();
+            let thumb_cleanup_running = thumb_cleanup_running.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(thumb_cleanup_interval);
+                loop {
+                    interval.tick().await;
+                    if shutdown.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    if thumb_cleanup_running
+                        .compare_exchange(
+                            false,
+                            true,
+                            std::sync::atomic::Ordering::SeqCst,
+                            std::sync::atomic::Ordering::SeqCst,
+                        )
+                        .is_err()
+                    {
+                        continue;
+                    }
+                    if let Err(e) =
+                        thumb_dedup::cleanup_orphan_thumbs(&thumb_dir, thumb_cleanup_max_age)
+                    {
+                        warn!("清理缩略图缓存失败: {:?}", e);
+                    }
+                    thumb_cleanup_running.store(false, std::sync::atomic::Ordering::SeqCst);
+                }
+            })
+        };
         let hotreload_task = {
             let hotreload = Arc::new(self.hotreload.clone());
             let shutdown = shutdown.clone();
@@ -1996,6 +2031,7 @@ impl TelegramForwarder {
         draining.store(true, std::sync::atomic::Ordering::Relaxed);
         state_task.abort();
         session_clean_task.abort();
+        thumb_cleanup_task.abort();
         hotreload_task.abort();
         album_task.abort();
         text_merge_task.abort();

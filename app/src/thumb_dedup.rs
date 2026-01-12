@@ -25,6 +25,10 @@ impl FileGuard {
             should_remove: path.exists(),
         }
     }
+
+    fn mark_created(&mut self) {
+        self.should_remove = true;
+    }
 }
 
 impl Drop for FileGuard {
@@ -53,6 +57,11 @@ impl ThumbDedupManager {
             std::fs::create_dir_all(&thumb_dir)
                 .with_context(|| format!("无法创建缩略图目录: {:?}", thumb_dir))?;
         }
+
+        if let Err(e) = cleanup_orphan_thumbs(&thumb_dir, Duration::from_secs(600)) {
+            warn!("清理缩略图缓存失败: {:?}", e);
+        }
+
         Ok(Self {
             client,
             thumb_dir,
@@ -168,10 +177,13 @@ impl ThumbDedupManager {
         let path = self.build_temp_path(media.media_id);
 
         // 使用 RAII guard 确保文件被清理
-        let _file_guard = FileGuard::new(&path);
+        let mut file_guard = FileGuard::new(&path);
 
         let bytes = match self.fetch_thumb_bytes(media, &path).await? {
-            Some(bytes) => bytes,
+            Some(bytes) => {
+                file_guard.mark_created();
+                bytes
+            }
             None => {
                 return Ok(None);
             }
@@ -215,6 +227,59 @@ impl Downloadable for ThumbDownload {
     fn to_raw_input_location(&self) -> Option<tl::enums::InputFileLocation> {
         Some(self.location.clone())
     }
+}
+
+pub(crate) fn cleanup_orphan_thumbs(thumb_dir: &Path, max_age: Duration) -> Result<usize> {
+    let mut removed = 0usize;
+    let now = SystemTime::now();
+    let entries = std::fs::read_dir(thumb_dir)
+        .with_context(|| format!("无法读取缩略图目录: {:?}", thumb_dir))?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let file_name = entry.file_name();
+        let name = match file_name.to_str() {
+            Some(name) => name,
+            None => continue,
+        };
+        if !name.starts_with("thumb_") {
+            continue;
+        }
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                warn!("读取缩略图元数据失败: path={:?} err={}", path, e);
+                continue;
+            }
+        };
+        let modified = match metadata.modified() {
+            Ok(modified) => modified,
+            Err(e) => {
+                warn!("读取缩略图修改时间失败: path={:?} err={}", path, e);
+                continue;
+            }
+        };
+        let age = match now.duration_since(modified) {
+            Ok(age) => age,
+            Err(_) => Duration::from_secs(0),
+        };
+        if age < max_age {
+            continue;
+        }
+        match std::fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(e) => {
+                warn!("删除缩略图文件失败: path={:?} err={}", path, e);
+            }
+        }
+    }
+    if removed > 0 {
+        debug!("已清理遗留缩略图文件: count={}", removed);
+    }
+    Ok(removed)
 }
 
 fn compute_hashes(bytes: &[u8]) -> Result<ThumbHash> {
