@@ -63,16 +63,22 @@ rust_tdlib/
 │   ├── Cargo.toml
 │   └── src/
 │       └── lib.rs          # Tracing配置
-└── data/                   # 运行时数据（自动创建）
-    ├── logs.txt            # 应用日志
-    ├── state.json          # 处理状态（per-source last_committed）
-    ├── deduplication.json  # 去重数据库（version=2）
-    ├── user_session        # Telegram Session 主文件
-    ├── user_session-wal    # SQLite WAL 文件（定期 checkpoint 缩小）
-    └── user_session-shm    # SQLite 共享内存文件（由 SQLite 管理）
+├── sources.txt             # 来源列表（示例模板）
+├── keywords.txt            # 关键词过滤（可选）
+├── replacements.json       # 文本替换规则（示例模板）
+├── content_addition.json   # Header/Footer（示例模板）
+├── logs.txt                # 运行日志（运行时生成）
+├── state.json              # 处理状态（运行时生成）
+├── deduplication.json      # 去重数据库（运行时生成）
+├── user_session*           # Session 数据库与 WAL（运行时生成）
+└── data/                   # 缩略图缓存目录（默认）
+
 ```
 
+> 说明：`logs.txt`/`state.json`/`deduplication.json`/`user_session*`/`data/` 为运行时生成内容，默认被 `.gitignore` 忽略。
+
 ## 已实现的功能
+
 
 ### 1. 配置管理
 - 环境变量加载（兼容 .env 文件）
@@ -125,7 +131,7 @@ rust_tdlib/
 
 ### 6. 调度与并发
 - 任务队列（异步通道）
-- 并发 Worker 池（可配置数量，默认4-10）
+- 并发 Worker 池（可配置数量，默认3）
 - 优雅关闭（等待任务完成 + 超时提示）
 
 ### 7. 运行模式
@@ -154,7 +160,7 @@ rust_tdlib/
 ### 10. 日志系统
 - 结构化日志（tracing）
 - 日志级别配置（DEBUG/INFO/WARNING/ERROR）
-- 文件日志轮转（data/logs.txt）
+- 文件日志轮转（logs.txt）
 - 控制台日志输出
 
 ## 已知限制与待优化
@@ -201,45 +207,72 @@ image = "0.25"              # 图像处理（缩略图哈希）
 - `TG_API_ID`: Telegram API ID
 - `TG_API_HASH`: Telegram API Hash
 - `TG_TARGET`: 目标聊天
-- `TG_SOURCE_FILE`: 来源文件路径
-- `TG_MODE`: 运行模式（live/past，past 为历史轮询）
-- `TG_PAST_LIMIT`: 历史轮询分页大小（单次请求上限 100，首轮用于回补窗口）
-- `TG_CATCH_UP_INTERVAL`: 轮询/补漏间隔（秒，past 模式轮询频率，live 模式补漏周期）
-- `TG_ALBUM_DELAY`: 相册聚合延迟
-- `TG_ALBUM_MAX_ITEMS`: 相册聚合最大条数
-- `TG_ALBUM_BACKFILL_MAX_RANGE`: 相册补漏回拉最大 ID 范围
-- `TG_FORWARD_DELAY`: 转发间隔
-- `TG_FLOOD_WAIT_MAX_RETRIES`: FloodWait 最大重试次数
-- `TG_FLOOD_WAIT_MAX_TOTAL_WAIT`: FloodWait 最大累计等待时间（秒）
-- `TG_REQUEST_TIMEOUT`: 请求超时（秒，用于发送与历史拉取）
-- `TG_DISPATCHER_IDLE_TIMEOUT`: 等待发送任务完成的超时时间（秒，超时会触发重连）
-- `TG_UPDATES_IDLE_TIMEOUT`: 更新流空闲超时（秒，0 表示禁用，超时会触发重连）
-- `TG_WORKER_COUNT`: Worker 数量
-- `TG_ENABLE_FILE_FORWARD`: 是否允许文档/文件转发
-- `TG_KEYWORD_FILE`: 关键词文件
-- `TG_REPLACEMENT_FILE`: 替换规则文件
-- `TG_CONTENT_ADDITION_FILE`: 内容追加文件
-- `TG_DEDUP_FILE`: 去重记录文件路径（默认项目根 `deduplication.json`）
-- `TG_STATE_FLUSH_INTERVAL`: 状态/去重落盘与日志截断间隔
-- `TG_SHUTDOWN_DRAIN_TIMEOUT`: 退出/热重启等待任务完成的超时阈值（超时会告警；热重启超时后不再等待任务完成；退出信号下仍可能强制退出）
-- `TG_STATE_GAP_TIMEOUT`: 状态缺口等待超时（秒）
-- `TG_STATE_PENDING_LIMIT`: 状态待补队列上限
-- `TG_HOTRELOAD_INTERVAL`: 热更新检查间隔
-- `TG_DEDUP_SIMHASH_THRESHOLD` / `TG_DEDUP_JACCARD_SHORT_THRESHOLD` / `TG_DEDUP_JACCARD_LONG_THRESHOLD` / `TG_DEDUP_RECENT_TEXT_LIMIT`: 去重阈值
-- `TG_DEDUP_ALBUM_THUMB_RATIO`: 多图片去重比例阈值（0.0-1.0，默认0.34）
-- `TG_DEDUP_SHORT_TEXT_THRESHOLD`: 短文本阈值（字符数，默认50，用于双重验证）
-- `TG_APPEND_LIMIT_WITH_MEDIA` / `TG_APPEND_LIMIT_TEXT`: 文本追加长度上限
-- `TG_TEXT_MERGE_WINDOW` / `TG_TEXT_MERGE_MIN_LEN` / `TG_TEXT_MERGE_MAX_ID_GAP`: 文本合并窗口与阈值
-- 等等...
+- `TG_SOURCE_FILE`: 来源文件路径（默认 `sources.txt`）
+- `TG_MODE`: 运行模式（live/past）
+- `TG_PAST_LIMIT`: 历史轮询分页大小（默认 2000）
+- `TG_CATCH_UP_INTERVAL`: 轮询/补漏间隔（秒，默认 300）
+- `TG_ALBUM_DELAY`: 相册聚合延迟（默认 5.0）
+- `TG_ALBUM_MAX_ITEMS`: 相册聚合最大条数（默认 10，上限 10）
+- `TG_ALBUM_BACKFILL_MAX_RANGE`: 相册补漏回拉最大 ID 范围（默认 20）
+- `TG_FORWARD_DELAY`: 转发间隔（默认 0）
+- `TG_FLOOD_WAIT_MAX_RETRIES`: FloodWait 最大重试次数（默认 5）
+- `TG_FLOOD_WAIT_MAX_TOTAL_WAIT`: FloodWait 最大累计等待时间（秒，默认 3600）
+- `TG_REQUEST_TIMEOUT`: 请求超时（秒，默认 30）
+- `TG_DISPATCHER_IDLE_TIMEOUT`: 等待发送任务完成超时（秒，默认 300）
+- `TG_UPDATES_IDLE_TIMEOUT`: 更新流空闲超时（秒，默认 0 表示禁用）
+- `TG_WORKER_COUNT`: Worker 数量（默认 3）
+- `TG_ENABLE_FILE_FORWARD`: 是否允许文档/文件转发（默认 true）
+- `TG_MEDIA_SIZE_LIMIT`: 媒体大小上限（MB，默认 100）
+- `TG_MEDIA_EXT_ALLOWLIST`: 媒体扩展名白名单（逗号/分号/空格分隔）
+- `TG_KEYWORD_FILE`: 关键词文件（需显式设置才启用）
+- `TG_KEYWORD_CASE_SENSITIVE`: 关键词大小写敏感（默认 false）
+- `TG_KEYWORD_RELOAD_INTERVAL`: 关键词热更新检查间隔（秒，默认 2）
+- `TG_REPLACEMENT_FILE`: 替换规则文件（需显式设置才启用）
+- `TG_CONTENT_ADDITION_FILE`: 内容追加文件（需显式设置才启用）
+- `TG_DEDUP_FILE`: 去重记录文件路径（默认 `deduplication.json`）
+- `TG_DEDUP_LIMIT`: 文本指纹最大数量（默认 5000）
+- `TG_MEDIA_DEDUP_LIMIT`: 媒体指纹最大数量（默认 15000）
+- `TG_DEDUP_SIMHASH_THRESHOLD`: SimHash 阈值（默认 3）
+- `TG_DEDUP_JACCARD_SHORT_THRESHOLD`: 短文本 Jaccard 阈值（默认 0.7）
+- `TG_DEDUP_JACCARD_LONG_THRESHOLD`: 长文本 Jaccard 阈值（默认 0.5）
+- `TG_DEDUP_RECENT_TEXT_LIMIT`: 近期文本特征数量（默认 100）
+- `TG_DEDUP_PHASH_THRESHOLD`: pHash 阈值（默认 10）
+- `TG_DEDUP_DHASH_THRESHOLD`: dHash 阈值（默认 10，可使用 `TG_DEDUP_THUMB_DHASH_THRESHOLD`）
+- `TG_DEDUP_ALBUM_THUMB_RATIO`: 多图片去重比例阈值（默认 0.34）
+- `TG_DEDUP_SHORT_TEXT_THRESHOLD`: 短文本阈值（默认 50）
+- `TG_THUMB_DIR`: 缩略图缓存目录（默认 `data`）
+- `TG_APPEND_LIMIT_WITH_MEDIA`: 带媒体追加长度上限（默认 1024）
+- `TG_APPEND_LIMIT_TEXT`: 文本追加长度上限（默认 4096）
+- `TG_TEXT_MERGE_WINDOW`: 文本合并窗口（默认 0）
+- `TG_TEXT_MERGE_MIN_LEN`: 文本合并最小长度（默认 0）
+- `TG_TEXT_MERGE_MAX_ID_GAP`: 文本合并最大 ID 间隔（默认 5）
+- `TG_STATE_FLUSH_INTERVAL`: 状态/去重落盘与日志截断间隔（秒，默认 5）
+- `TG_SHUTDOWN_DRAIN_TIMEOUT`: 退出/热重启等待任务完成超时（秒，默认 30）
+- `TG_STATE_GAP_TIMEOUT`: 状态缺口等待超时（秒，默认 300）
+- `TG_STATE_PENDING_LIMIT`: 状态待补队列上限（默认 2000）
+- `TG_HOTRELOAD_INTERVAL`: 热更新检查间隔（秒，默认 2）
+- `TG_LOG_LEVEL`: 日志级别（默认 INFO）
+- `TG_LOG_MAX_LINES`: 日志最大保留行数（默认 100）
+- `TG_SESSION_NAME`: Session 文件名（默认 `user_session`）
+- `TG_TDLIB_DB_DIR`: TDLib 数据库目录（可选）
+- `TG_TDLIB_FILES_DIR`: TDLib 文件目录（可选）
+- `TG_DEVICE_MODEL`: 设备型号（可选）
+- `TG_SYSTEM_VERSION`: 系统版本（可选）
+- `TG_APP_VERSION`: 应用版本（可选）
+- `TG_SYSTEM_LANG`: 系统语言（可选）
+- `TG_USE_TEST_DC`: 使用测试 DC（可选）
+
 
 ## 与 Python 版本的兼容性
 
 ### 兼容的文件格式
+- `sources.txt`（来源列表）
 - `state.json`（两种格式）
 - `deduplication.json`（version=2）
 - `keywords.txt`（白名单/黑名单）
 - `replacements.json`（正则/精确替换）
 - `content_addition.json`（header/footer）
+
 
 ### 兼容的配置项
 - 所有环境变量配置
@@ -260,6 +293,8 @@ cargo build --release
 # 首次运行需要配置 .env 文件
 cp config.example.env .env
 # 编辑 .env 文件，填入 TG_API_ID 和 TG_API_HASH
+# 更新 sources.txt / replacements.json / content_addition.json / keywords.txt（按需）
+
 
 # 运行（实时模式）
 cargo run --release
@@ -282,7 +317,7 @@ cargo test --workspace
 
 ## 日志与调试
 
-日志输出到 `data/logs.txt`，支持以下级别：
+日志输出到 `logs.txt`，支持以下级别：
 - DEBUG
 - INFO
 - WARNING

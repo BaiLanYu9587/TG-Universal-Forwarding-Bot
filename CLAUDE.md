@@ -109,10 +109,12 @@ Messages flow through `Pipeline::process()` in `core/src/pipeline.rs`:
 
 ### Key Data Files
 
-- `data/state.json` - Per-source `last_committed` and `pending` IDs
-- `data/deduplication.json` - Deduplication fingerprints and media signatures (version=2)
-- `data/logs.txt` - Application log output
-- `data/user_session` - Telegram session file (SQLite-based)
+- `state.json` - Per-source `last_committed` and `pending` IDs (runtime)
+- `deduplication.json` - Deduplication fingerprints and media signatures (version=2, runtime)
+- `logs.txt` - Application log output (runtime)
+- `user_session*` - Telegram session file + WAL/SHM (runtime)
+- `data/` - Thumbnail cache directory (default)
+
 
 ### Important Invariants
 

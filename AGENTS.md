@@ -56,8 +56,9 @@ Cursor/Copilot 规则：未发现 .cursor/rules、.cursorrules 或 .github/copil
 运行前准备：
 - 复制示例配置：cp config.example.env .env
 - 填写 TG_API_ID/TG_API_HASH 后再运行。
-- .env 与 data/ 为运行时产物，不提交。
-- data/ 目录自动创建，日志写入 data/logs.txt。
+- .env 与 logs.txt/state.json/deduplication.json/user_session* 为运行时产物，不提交。
+- data/ 目录自动创建用于缩略图缓存，日志写入 logs.txt。
+
 - 使用 TG_LOG_LEVEL 控制日志级别。
 - 运行时依赖 Telegram 授权流程（手机号/验证码/二步验证）。
 
