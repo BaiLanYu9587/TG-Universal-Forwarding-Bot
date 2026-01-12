@@ -1,6 +1,6 @@
 # Rust + grammers Telegram Forwarder
 
-**Languages:** English | [中文](README_zh.md) | [日本語](README_ja.md) | [한국어](README_ko.md)
+**Languages:** English | [中文](docs/i18n/README_zh.md) | [日本語](docs/i18n/README_ja.md) | [한국어](docs/i18n/README_ko.md)
 
 ## Project Structure
 
