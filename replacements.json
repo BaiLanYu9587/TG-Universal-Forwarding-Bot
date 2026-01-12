@@ -1,0 +1,12 @@
+[
+  {
+    "type": "regex",
+    "pattern": "(?:\\r?\\n|^)\\s*示例广告.*",
+    "replacement": ""
+  },
+  {
+    "type": "exact",
+    "pattern": "示例替换文本",
+    "replacement": ""
+  }
+]
