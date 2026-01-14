@@ -392,6 +392,24 @@ async fn recv_update_with_timeout(
     }
 }
 
+fn is_network_send_error(err: &anyhow::Error) -> bool {
+    let message = err.to_string();
+    let lower = message.to_lowercase();
+    lower.contains("read error")
+        || lower.contains("io failed")
+        || lower.contains("connection")
+        || lower.contains("timeout")
+        || lower.contains("timed out")
+        || lower.contains("network")
+        || lower.contains("reset")
+        || lower.contains("broken pipe")
+        || lower.contains("transport")
+        || message.contains("超时")
+        || message.contains("网络")
+        || message.contains("断开")
+        || message.contains("连接重置")
+}
+
 impl TelegramForwarder {
     fn sanitize_identifier(raw: &str) -> String {
         let trimmed = raw.trim();
@@ -703,10 +721,15 @@ impl TelegramForwarder {
         Vec::new()
     }
 
-    fn start_dispatcher(&mut self, handler: Arc<MessageHandler>) {
+    fn start_dispatcher(
+        &mut self,
+        handler: Arc<MessageHandler>,
+        reload_tx: Option<mpsc::UnboundedSender<()>>,
+    ) {
         let state = self.state.clone();
         let pipeline = self.pipeline.clone();
         let inflight = self.inflight.clone();
+        let reload_tx = reload_tx.clone();
         let effective_gap_timeout = std::time::Duration::from_secs(
             self.config
                 .state_gap_timeout
@@ -718,6 +741,7 @@ impl TelegramForwarder {
             let state = state.clone();
             let pipeline = pipeline.clone();
             let inflight = inflight.clone();
+            let reload_tx = reload_tx.clone();
             let effective_gap_timeout = effective_gap_timeout;
 
             async move {
@@ -743,6 +767,12 @@ impl TelegramForwarder {
                                 pipeline.rollback_dedup(info);
                             }
                             error!("处理任务失败: {}", e);
+                            if let Some(reload_tx) = reload_tx.as_ref() {
+                                if is_network_send_error(&e) {
+                                    warn!("发送任务疑似网络错误，触发重连: {}", e);
+                                    let _ = reload_tx.send(());
+                                }
+                            }
                             send_failed = true;
                         }
                     }
@@ -853,7 +883,7 @@ impl TelegramForwarder {
             flood_wait_policy,
         ));
 
-        self.start_dispatcher(handler.clone());
+        self.start_dispatcher(handler.clone(), None);
 
         let state_file = resolve_path("", "state.json");
         let dedup_file = self.config.dedup_file.clone();
@@ -1469,7 +1499,8 @@ impl TelegramForwarder {
             flood_wait_policy,
         ));
 
-        self.start_dispatcher(handler.clone());
+        let (reload_tx, mut reload_rx) = mpsc::unbounded_channel();
+        self.start_dispatcher(handler.clone(), Some(reload_tx));
 
         let state_file = resolve_path("", "state.json");
         let dedup_file = self.config.dedup_file.clone();
@@ -2016,6 +2047,16 @@ impl TelegramForwarder {
                         self.draining.store(true, std::sync::atomic::Ordering::Relaxed);
                         break RunOutcome::Reload;
                     }
+                }
+                reload = reload_rx.recv() => {
+                    if reload.is_some() {
+                        warn!("检测到发送网络错误，触发重连...");
+                        self.draining.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break RunOutcome::Reload;
+                    }
+                    warn!("发送重连通道已关闭，触发重连...");
+                    self.draining.store(true, std::sync::atomic::Ordering::Relaxed);
+                    break RunOutcome::Reload;
                 }
                 _ = signal::ctrl_c() => {
                     info!("收到退出信号");

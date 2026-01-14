@@ -162,7 +162,7 @@ journalctl -u tgbot.service -f
 ### 6.2 查看最近日志
 
 ```bash
-journalctl -u tgbot.service -n 300 --no-pager
+journalctl -u tgbot.service -n 1000 --no-pager
 ```
 
 ### 6.3 常见问题
